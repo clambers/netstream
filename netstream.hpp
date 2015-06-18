@@ -32,8 +32,11 @@
 #endif
 
 #include <cstring>
-#include <iostream>
 #include <string>
+#include <iostream>
+#include <vector>
+#include <map>
+#include <iterator>
 
 namespace net {
   template<typename _char_t, typename _traits>
@@ -119,6 +122,36 @@ namespace net {
   };
 
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
+  class basic_httprequest {
+  public:
+    typedef _char_t char_type;
+    typedef _traits traits_type;
+    typedef std::basic_string<char_type, traits_type> string_type;
+    typedef std::map<string_type, string_type> headers_type;
+
+    basic_httprequest();
+    basic_httprequest(char_type const*);
+    basic_httprequest(char_type const*, char_type const*);
+    void add_header(char_type const*, char_type const*);
+
+    friend std::ostream& operator<<(std::ostream& os,
+                                    basic_httprequest const& req) {
+      os << req._method << " " << req._url << " HTTP/1.1" << endl;
+      for (typename headers_type::const_iterator it = req._headers.begin();
+           it != req._headers.end(); ++it) {
+        os << it->first << ": " << it->second << endl;
+      }
+      os << endl;
+      return os;
+    }
+
+  private:
+    headers_type _headers;
+    string_type _method;
+    string_type _url;
+  };
+
+  template<typename _char_t, typename _traits = std::char_traits<_char_t> >
   class basic_httpstream : public basic_iosockstream<_char_t, _traits> {
   private:
     typedef basic_httpbuf<_char_t, _traits> _buffer_t;
@@ -127,6 +160,7 @@ namespace net {
   public:
     typedef _char_t char_type;
     typedef _traits traits_type;
+    typedef basic_httprequest<char_type, traits_type> request_type;
 
     basic_httpstream();
     basic_httpstream(char const*,
@@ -265,6 +299,24 @@ namespace net {
   template<typename T, typename U>
   basic_iosockstream<T,U>::basic_iosockstream(basic_sockbuf<T,U>* buf)
     : basic_isockstream<T,U>(buf), basic_osockstream<T,U>(buf) {}
+
+  template<typename T, typename U>
+  basic_httprequest<T,U>::basic_httprequest() : _method("GET"), _url("/") {}
+
+  template<typename T, typename U>
+  basic_httprequest<T,U>::basic_httprequest(char_type const* url)
+    : _method("GET"), _url(url) {}
+
+  template<typename T, typename U>
+  basic_httprequest<T,U>::basic_httprequest(char_type const* method,
+                                            char_type const* url)
+    : _method(method), _url(url) {}
+
+  template<typename T, typename U>
+  void basic_httprequest<T,U>::add_header(char_type const* name,
+                                          char_type const* value) {
+    _headers[name] = value;
+  }
 
   template<typename T, typename U>
   basic_httpstream<T,U>::basic_httpstream() : basic_iosockstream<T,U>(&_buf) {}
