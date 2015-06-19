@@ -34,6 +34,7 @@
 #include <cstring>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <map>
 #include <iterator>
@@ -121,6 +122,9 @@ namespace net {
     basic_iosockstream(basic_sockbuf<_char_t, _traits>*);
   };
 
+  template<typename T, typename U>
+  class basic_httpstream;
+
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
   class basic_httprequest {
   public:
@@ -128,27 +132,30 @@ namespace net {
     typedef _traits traits_type;
     typedef std::basic_string<char_type, traits_type> string_type;
     typedef std::map<string_type, string_type> headers_type;
+    typedef std::basic_istream<char_type, traits_type> stream_type;
 
     basic_httprequest();
     basic_httprequest(char_type const*);
     basic_httprequest(char_type const*, char_type const*);
     void add_header(char_type const*, char_type const*);
-
-    friend std::ostream& operator<<(std::ostream& os,
-                                    basic_httprequest const& req) {
-      os << req._method << " " << req._url << " HTTP/1.1" << endl;
-      for (typename headers_type::const_iterator it = req._headers.begin();
-           it != req._headers.end(); ++it) {
-        os << it->first << ": " << it->second << endl;
-      }
-      os << endl;
-      return os;
-    }
+    friend class basic_httpstream<char_type, traits_type>;
 
   private:
     headers_type _headers;
     string_type _method;
     string_type _url;
+  };
+
+  template<typename _char_t, typename _traits = std::char_traits<_char_t> >
+  struct basic_httpresponse {
+    typedef _char_t char_type;
+    typedef _traits traits_type;
+    typedef std::basic_istream<char_type, traits_type> stream_type;
+
+    char_type body[128];
+
+    virtual ~basic_httpresponse();
+
   };
 
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
@@ -160,12 +167,40 @@ namespace net {
   public:
     typedef _char_t char_type;
     typedef _traits traits_type;
+    typedef std::basic_istream<char_type, traits_type> istream_type;
+    typedef std::basic_ostream<char_type, traits_type> ostream_type;
     typedef basic_httprequest<char_type, traits_type> request_type;
+    typedef basic_httpresponse<char_type, traits_type> response_type;
 
     basic_httpstream();
     basic_httpstream(char const*,
                      _mode_t = std::ios_base::in | std::ios_base::out);
     void open(char const*, _mode_t = std::ios_base::in | std::ios_base::out);
+
+    basic_httpstream& operator>>(response_type& res) {
+      typename istream_type::sentry sentry(*this);
+      std::basic_ostringstream<char_type, traits_type> oss;
+      std::copy(std::istreambuf_iterator<char_type>(*this),
+                std::istreambuf_iterator<char_type>(),
+                std::ostream_iterator<char_type>(oss));
+      std::basic_string<char_type, traits_type> s(oss.str());
+      traits_type::copy(&res.body[0], s.c_str(), 127);
+      traits_type::assign(res.body[127], '\0');
+      return *this;
+    }
+
+    basic_httpstream& operator<<(request_type const& req) {
+      typename ostream_type::sentry sentry(*this);
+      *this << req._method << " " << req._url << " HTTP/1.1" << endl;
+      for (typename request_type::headers_type::const_iterator it
+             = req._headers.begin();
+           it != req._headers.end();
+           ++it) {
+        *this << it->first << ": " << it->second << endl;
+      }
+      *this << endl;
+      return *this;
+    }
 
   private:
     _buffer_t _buf;
@@ -179,6 +214,10 @@ namespace net {
   typedef basic_isockstream<wchar_t> wisockstream;
   typedef basic_iosockstream<char> iosockstream;
   typedef basic_iosockstream<wchar_t> wiosockstream;
+  typedef basic_httprequest<char> httprequest;
+  typedef basic_httprequest<wchar_t> whttprequest;
+  typedef basic_httpresponse<char> httpresponse;
+  typedef basic_httpresponse<wchar_t> whttpresponse;
   typedef basic_httpstream<char> httpstream;
   typedef basic_httpstream<wchar_t> whttpstream;
 
@@ -317,6 +356,9 @@ namespace net {
                                           char_type const* value) {
     _headers[name] = value;
   }
+
+  template<typename T, typename U>
+  basic_httpresponse<T,U>::~basic_httpresponse() {}
 
   template<typename T, typename U>
   basic_httpstream<T,U>::basic_httpstream() : basic_iosockstream<T,U>(&_buf) {}
