@@ -10,15 +10,19 @@ NetStream supports Windows, OSX, and GNU/Linux.
 Here's some sample code that spits out my favorite website:
 
 ```C++
-net::httpstream conn("zombo.com");
+typedef net::httpstream stream_type;
 
-conn << "GET / HTTP/1.0" << net::endl
-     << "Accept: text/html" << net::endl
-     << net::endl;
+stream_type conn("zombo.com");
+stream_type::request_type req;
+stream_type::response_type res;
 
-std::copy(std::istreambuf_iterator<char>(conn),
-          std::istreambuf_iterator<char>(),
-          std::ostream_iterator<char>(std::cout));
+req.add_header("Host", "zombo.com");
+req.add_header("Accept", "text/html");
+
+conn << req;
+conn >> res;
+
+std::cout << res.body.str() << std::endl;
 ```
 
 Using NetStream is easy: just add the single header to your project and you're
