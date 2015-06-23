@@ -375,10 +375,12 @@ namespace net {
     getline(is, status.second);
     string_type s;
     getline(is, s);
+    s.erase(s.end());
+    std::cout << "checking '" << s << "'" << std::endl;
     while (!s.empty()) {
-      std::cout << "adding '" << s << "'" << std::endl;
       headers.push_back(s);
       getline(is, s);
+      s.erase(s.end());
     }
     std::copy(std::istreambuf_iterator<char_type>(is),
               std::istreambuf_iterator<char_type>(),
