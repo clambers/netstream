@@ -151,7 +151,7 @@ namespace net {
     typedef std::basic_istream<char_type, traits_type> istream_type;
     typedef std::basic_string<char_type, traits_type> string_type;
     typedef std::pair<int, string_type> status_type;
-    typedef std::vector<string_type> headers_type;
+    typedef std::map<string_type, string_type> headers_type;
     typedef std::basic_stringstream<char_type, traits_type> body_type;
 
     status_type status;
@@ -188,7 +188,8 @@ namespace net {
   endl(std::basic_ostream<_char_t, _traits>&);
 
   template<typename T, typename U>
-  basic_httpstream<T,U>& getline(basic_httpstream<T,U>&, std::basic_string<T,U>&);
+  std::basic_istream<T,U>&
+  getline(std::basic_istream<T,U>&, std::basic_string<T,U>&);
 
   template<typename T, typename U>
   basic_httpstream<T,U>&
@@ -372,16 +373,17 @@ namespace net {
               traits_type::to_int_type(' '));
     is >> status.first;
     is.get();
-    getline(is, status.second);
+    net::getline(is, status.second);
     string_type s;
-    getline(is, s);
-    s.erase(s.end());
-    std::cout << "checking '" << s << "'" << std::endl;
+    net::getline(is, s);
     while (!s.empty()) {
-      headers.push_back(s);
-      getline(is, s);
-      s.erase(s.end());
-    }
+      typename string_type::size_type pos1(s.find_first_of(':'));
+      typename string_type::size_type pos2(s.find_first_not_of(' ', pos1+1));
+      string_type name(s.substr(0, pos1));
+      string_type value(s.substr(pos2, string_type::npos));
+      headers.insert(std::make_pair(name, value));
+      net::getline(is, s);
+     }
     std::copy(std::istreambuf_iterator<char_type>(is),
               std::istreambuf_iterator<char_type>(),
               std::ostream_iterator<char_type>(body));
@@ -410,30 +412,29 @@ namespace net {
 
   template<typename T, typename U>
   std::basic_istream<T,U>& getline(std::basic_istream<T,U>& is, std::basic_string<T,U>& s) {
-    T eof = U::eof();
-    s.clear();
+    typedef typename std::basic_istream<T,U>::traits_type traits;
     typename std::basic_istream<T,U>::sentry sentry(is, true);
     std::basic_streambuf<T,U>* sb = is.rdbuf();
-    for (;;) {
-      int ch = sb->sbumpc();
-      switch (ch) {
-      case '\n':
-        return is;
 
-      case '\r':
-        if (sb->sgetc() == '\n') {
+    s.clear();
+
+    while (1) {
+      int ch = sb->sbumpc();
+
+      if (traits::eq_int_type(ch, traits::to_int_type('\n'))) {
+        return is;
+      } else if (traits::eq_int_type(ch, traits::to_int_type('\r'))) {
+        if (traits::eq_int_type(sb->sgetc(), traits::to_int_type('\n'))) {
           sb->sbumpc();
         }
         return is;
-
-      case eof:
+      } else if (traits::eq_int_type(ch, traits::eof())) {
         if (s.empty()) {
-          is.setstate(std::ios::eofbit);
+          is.setstate(std::ios_base::eofbit);
         }
         return is;
-
-      default:
-        s += (char)ch;
+      } else {
+        s += traits::to_char_type(ch);
       }
     }
   }
