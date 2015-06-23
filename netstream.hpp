@@ -31,6 +31,7 @@
 # define closesocket close
 #endif
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <iostream>
@@ -38,12 +39,9 @@
 #include <vector>
 #include <map>
 #include <iterator>
+#include <limits>
 
 namespace net {
-  template<typename _char_t, typename _traits>
-  std::basic_ostream<_char_t, _traits>&
-  endl(std::basic_ostream<_char_t, _traits>&);
-
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
   class basic_sockbuf : public std::basic_streambuf<_char_t, _traits> {
   private:
@@ -130,81 +128,75 @@ namespace net {
   public:
     typedef _char_t char_type;
     typedef _traits traits_type;
+    typedef std::basic_ostream<char_type, traits_type> ostream_type;
     typedef std::basic_string<char_type, traits_type> string_type;
     typedef std::map<string_type, string_type> headers_type;
-    typedef std::basic_istream<char_type, traits_type> stream_type;
 
     basic_httprequest();
     basic_httprequest(char_type const*);
     basic_httprequest(char_type const*, char_type const*);
     void add_header(char_type const*, char_type const*);
-    friend class basic_httpstream<char_type, traits_type>;
+    void write(ostream_type&) const;
 
   private:
-    headers_type _headers;
     string_type _method;
     string_type _url;
+    headers_type _headers;
   };
 
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
   struct basic_httpresponse {
     typedef _char_t char_type;
     typedef _traits traits_type;
-    typedef std::basic_istream<char_type, traits_type> stream_type;
+    typedef std::basic_istream<char_type, traits_type> istream_type;
+    typedef std::basic_string<char_type, traits_type> string_type;
+    typedef std::pair<int, string_type> status_type;
+    typedef std::vector<string_type> headers_type;
+    typedef std::basic_stringstream<char_type, traits_type> body_type;
 
-    char_type body[128];
+    status_type status;
+    headers_type headers;
+    body_type body;
 
     virtual ~basic_httpresponse();
-
+    void read(istream_type&);
   };
 
   template<typename _char_t, typename _traits = std::char_traits<_char_t> >
   class basic_httpstream : public basic_iosockstream<_char_t, _traits> {
-  private:
-    typedef basic_httpbuf<_char_t, _traits> _buffer_t;
-    typedef std::ios_base::openmode _mode_t;
-
   public:
     typedef _char_t char_type;
     typedef _traits traits_type;
+    typedef basic_httpbuf<char_type, traits_type> buffer_type;
     typedef std::basic_istream<char_type, traits_type> istream_type;
     typedef std::basic_ostream<char_type, traits_type> ostream_type;
     typedef basic_httprequest<char_type, traits_type> request_type;
     typedef basic_httpresponse<char_type, traits_type> response_type;
+    typedef std::ios_base::openmode mode_type;
 
     basic_httpstream();
-    basic_httpstream(char const*,
-                     _mode_t = std::ios_base::in | std::ios_base::out);
-    void open(char const*, _mode_t = std::ios_base::in | std::ios_base::out);
-
-    basic_httpstream& operator>>(response_type& res) {
-      typename istream_type::sentry sentry(*this);
-      std::basic_ostringstream<char_type, traits_type> oss;
-      std::copy(std::istreambuf_iterator<char_type>(*this),
-                std::istreambuf_iterator<char_type>(),
-                std::ostream_iterator<char_type>(oss));
-      std::basic_string<char_type, traits_type> s(oss.str());
-      traits_type::copy(&res.body[0], s.c_str(), 127);
-      traits_type::assign(res.body[127], '\0');
-      return *this;
-    }
-
-    basic_httpstream& operator<<(request_type const& req) {
-      typename ostream_type::sentry sentry(*this);
-      *this << req._method << " " << req._url << " HTTP/1.1" << endl;
-      for (typename request_type::headers_type::const_iterator it
-             = req._headers.begin();
-           it != req._headers.end();
-           ++it) {
-        *this << it->first << ": " << it->second << endl;
-      }
-      *this << endl;
-      return *this;
-    }
+    basic_httpstream(char const*, mode_type = std::ios_base::in | std::ios_base::out);
+    buffer_type* rdbuf() const;
+    void open(char const*, mode_type = std::ios_base::in | std::ios_base::out);
 
   private:
-    _buffer_t _buf;
+    buffer_type _buf;
   };
+
+  template<typename _char_t, typename _traits>
+  std::basic_ostream<_char_t, _traits>&
+  endl(std::basic_ostream<_char_t, _traits>&);
+
+  template<typename T, typename U>
+  basic_httpstream<T,U>& getline(basic_httpstream<T,U>&, std::basic_string<T,U>&);
+
+  template<typename T, typename U>
+  basic_httpstream<T,U>&
+  operator<<(basic_httpstream<T,U>&, typename basic_httpstream<T,U>::request_type const&);
+
+  template<typename T, typename U>
+  basic_httpstream<T,U>&
+  operator>>(basic_httpstream<T,U>&, typename basic_httpstream<T,U>::response_type&);
 
   typedef basic_sockbuf<char> sockbuf;
   typedef basic_sockbuf<wchar_t> wsockbuf;
@@ -358,7 +350,36 @@ namespace net {
   }
 
   template<typename T, typename U>
+  void basic_httprequest<T,U>::write(ostream_type& os) const {
+    os << _method << " " << _url << " HTTP/1.1" << endl;
+    for (typename headers_type::const_iterator it = _headers.begin();
+         it != _headers.end(); ++it) {
+      os << it->first << ": " << it->second << endl;
+    }
+    os << endl;
+  }
+
+  template<typename T, typename U>
   basic_httpresponse<T,U>::~basic_httpresponse() {}
+
+  template<typename T, typename U>
+  void basic_httpresponse<T,U>::read(istream_type& is) {
+    is.ignore(std::numeric_limits<std::streamsize>::max(),
+              traits_type::to_int_type(' '));
+    is >> status.first;
+    is.rdbuf()->stossc();
+    getline(is, status.second);
+    string_type s;
+    getline(is, s);
+    while (!s.empty()) {
+      std::cout << "adding '" << s << "'" << std::endl;
+      headers.push_back(s);
+      getline(is, s);
+    }
+    std::copy(std::istreambuf_iterator<char_type>(is),
+              std::istreambuf_iterator<char_type>(),
+              std::ostream_iterator<char_type>(body));
+  }
 
   template<typename T, typename U>
   basic_httpstream<T,U>::basic_httpstream() : basic_iosockstream<T,U>(&_buf) {}
@@ -378,6 +399,52 @@ namespace net {
   void basic_httpstream<T,U>::open(char const* url,
                                    std::ios_base::openmode mode) {
     _buf.open(url, mode);
+  }
+
+  template<typename T, typename U>
+  std::basic_istream<T,U>& getline(std::basic_istream<T,U>& is, std::basic_string<T,U>& s) {
+    T eof = U::eof();
+    s.clear();
+    typename std::basic_istream<T,U>::sentry sentry(is, true);
+    std::basic_streambuf<T,U>* sb = is.rdbuf();
+    for (;;) {
+      int ch = sb->sbumpc();
+      switch (ch) {
+      case '\n':
+        return is;
+
+      case '\r':
+        if (sb->sgetc() == '\n') {
+          sb->sbumpc();
+        }
+        return is;
+
+      case eof:
+        if (s.empty()) {
+          is.setstate(std::ios::eofbit);
+        }
+        return is;
+
+      default:
+        s += (char)ch;
+      }
+    }
+  }
+
+  template<typename T, typename U>
+  basic_httpstream<T,U>&
+  operator<<(basic_httpstream<T,U>& hs,
+             typename basic_httpstream<T,U>::request_type const& req) {
+    req.write(hs);
+    return hs;
+  }
+
+  template<typename T, typename U>
+  basic_httpstream<T,U>&
+  operator>>(basic_httpstream<T,U>& hs,
+             typename basic_httpstream<T,U>::response_type& res) {
+    res.read(hs);
+    return hs;
   }
 }
 
