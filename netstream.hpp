@@ -262,6 +262,7 @@ namespace net {
     _pbuf[0] = c;
     std::memset(&_pbuf[1], 0, MAXBUF-1);
     this->setp(&_pbuf[0], &_pbuf[MAXBUF-1]);
+    return c;
   }
 
   template<typename T, typename U>
@@ -318,7 +319,8 @@ namespace net {
   }
 
   template<typename T, typename U>
-  basic_isockstream<T,U>::basic_isockstream(basic_sockbuf<T,U>* buf) {
+  basic_isockstream<T,U>::basic_isockstream(basic_sockbuf<T,U>* buf)
+    : std::basic_istream<T,U>(buf) {
     this->init(buf);
   }
 
@@ -329,7 +331,9 @@ namespace net {
 
   template<typename T, typename U>
   basic_iosockstream<T,U>::basic_iosockstream(basic_sockbuf<T,U>* buf)
-    : basic_isockstream<T,U>(buf), basic_osockstream<T,U>(buf) {}
+    : std::basic_istream<T,U>(buf),
+      basic_isockstream<T,U>(buf),
+      basic_osockstream<T,U>(buf) {}
 
   template<typename T, typename U>
   basic_httprequest<T,U>::basic_httprequest() : _method("GET"), _url("/") {}
@@ -367,7 +371,7 @@ namespace net {
     is.ignore(std::numeric_limits<std::streamsize>::max(),
               traits_type::to_int_type(' '));
     is >> status.first;
-    is.rdbuf()->stossc();
+    is.get();
     getline(is, status.second);
     string_type s;
     getline(is, s);
@@ -382,12 +386,13 @@ namespace net {
   }
 
   template<typename T, typename U>
-  basic_httpstream<T,U>::basic_httpstream() : basic_iosockstream<T,U>(&_buf) {}
+  basic_httpstream<T,U>::basic_httpstream()
+    : std::basic_istream<T,U>(&_buf), basic_iosockstream<T,U>(&_buf) {}
 
   template<typename T, typename U>
   basic_httpstream<T,U>::basic_httpstream(char const* url,
                                           std::ios_base::openmode mode)
-    : basic_iosockstream<T,U>(&_buf) {
+    : std::basic_istream<T,U>(&_buf), basic_iosockstream<T,U>(&_buf) {
     if (!_buf.open(url, mode)) {
       this->setstate(std::ios_base::failbit);
     } else {
