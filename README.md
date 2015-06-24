@@ -10,19 +10,15 @@ NetStream supports Windows, OSX, and GNU/Linux.
 Here's some sample code that spits out my favorite website:
 
 ```C++
-typedef net::httpstream stream_type;
+net::httpstream conn("zombo.com");
 
-stream_type conn("zombo.com");
-stream_type::request_type req;
-stream_type::response_type res;
-
+net::httprequest req;
 req.add_header("Host", "zombo.com");
 req.add_header("Accept", "text/html");
 
 conn << req;
-conn >> res;
 
-std::cout << res.body.str() << std::endl;
+std::cout << conn.rdbuf() << std::endl;
 ```
 
 Using NetStream is easy: just add the single header to your project and you're
@@ -35,8 +31,7 @@ extremely unstable. It should not be used for production software.
 
 ---------------------------------
 
-Copyright © 2015 Chris Lamberson.
-
+© 2015 Chris Lamberson  
 Licensed under the [LGPLv3][1].
 
 [1]: https://www.gnu.org/licenses/lgpl-3.0-standalone.html
