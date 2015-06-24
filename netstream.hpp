@@ -175,9 +175,11 @@ namespace net {
     typedef std::ios_base::openmode mode_type;
 
     basic_httpstream();
-    basic_httpstream(char const*, mode_type = std::ios_base::in | std::ios_base::out);
+    basic_httpstream(char const*,
+                     mode_type = std::ios_base::in | std::ios_base::out);
+    void open(char const*,
+              mode_type = std::ios_base::in | std::ios_base::out);
     buffer_type* rdbuf() const;
-    void open(char const*, mode_type = std::ios_base::in | std::ios_base::out);
 
   private:
     buffer_type _buf;
@@ -408,6 +410,12 @@ namespace net {
   void basic_httpstream<T,U>::open(char const* url,
                                    std::ios_base::openmode mode) {
     _buf.open(url, mode);
+  }
+
+  template<typename T, typename U>
+  typename basic_httpstream<T,U>::buffer_type*
+  basic_httpstream<T,U>::rdbuf() const {
+    return const_cast<buffer_type*>(&_buf);
   }
 
   template<typename T, typename U>
