@@ -110,8 +110,8 @@ public:
 };
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
-class basic_iosockstream : public basic_osockstream<_CharT, _Traits>,
-                           public basic_isockstream<_CharT, _Traits>
+class basic_iosockstream : public basic_isockstream<_CharT, _Traits>,
+                           public basic_osockstream<_CharT, _Traits>
 {
 public:
   typedef _CharT char_type;
@@ -353,20 +353,16 @@ basic_httpbuf<_CharT, _Traits>::open(char const* __url, __openmode_type)
 template<typename _CharT, typename _Traits>
 basic_isockstream<_CharT, _Traits>::basic_isockstream(__buffer_type* __buf)
   : std::basic_istream<_CharT, _Traits>(__buf)
-{
-  this->init(__buf);
-}
+{}
 
 template<typename _CharT, typename _Traits>
 basic_osockstream<_CharT, _Traits>::basic_osockstream(__buffer_type* __buf)
-{
-  this->init(__buf);
-}
+  : std::basic_ostream<_CharT, _Traits>(__buf)
+{}
 
 template<typename _CharT, typename _Traits>
 basic_iosockstream<_CharT, _Traits>::basic_iosockstream(__buffer_type* __buf)
-  : std::basic_istream<_CharT, _Traits>(__buf),
-    basic_isockstream<_CharT, _Traits>(__buf),
+  : basic_isockstream<_CharT, _Traits>(__buf),
     basic_osockstream<_CharT, _Traits>(__buf)
 {}
 
