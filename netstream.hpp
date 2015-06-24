@@ -259,7 +259,7 @@ namespace net {
   template<typename T, typename U>
   typename basic_sockbuf<T,U>::int_type
   basic_sockbuf<T,U>::overflow(int_type c) {
-    int bytes_sent = ::send(_sockfd, _pbuf, traits_type::length(_pbuf), 0);
+    ::send(_sockfd, _pbuf, traits_type::length(_pbuf), 0);
     _pbuf[0] = c;
     std::memset(&_pbuf[1], 0, MAXBUF-1);
     this->setp(&_pbuf[0], &_pbuf[MAXBUF-1]);
@@ -280,7 +280,7 @@ namespace net {
 
   template<typename T, typename U>
   int basic_sockbuf<T,U>::sync() {
-    int bytes_sent = ::send(_sockfd, _pbuf, traits_type::length(_pbuf), 0);
+    ::send(_sockfd, _pbuf, traits_type::length(_pbuf), 0);
     std::memset(&_pbuf[0], 0, MAXBUF);
     this->setp(&_pbuf[0], &_pbuf[MAXBUF-1]);
     return 0;
@@ -291,7 +291,7 @@ namespace net {
 
   template<typename T, typename U>
   basic_httpbuf<T,U>* basic_httpbuf<T,U>::open(char const* url,
-                                               std::ios_base::openmode mode) {
+                                               std::ios_base::openmode) {
     struct addrinfo hints, *info, *p;
     int result, sockfd;
     std::memset(&hints, 0, sizeof(hints));
