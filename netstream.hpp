@@ -46,34 +46,44 @@
 
 __BEGIN_NETSTREAM_NAMESPACE
 
+// ============= //
+// basic_sockbuf //
+// ============= //
+
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_sockbuf : public std::basic_streambuf<_CharT, _Traits>
 {
 public:
+  enum { MAXBUF = 1024 };
+
   typedef _CharT char_type;
   typedef _Traits traits_type;
   typedef typename traits_type::int_type int_type;
   typedef SOCKET __socket_type;
 
   virtual ~basic_sockbuf();
+  basic_sockbuf* close();
 
 protected:
   basic_sockbuf();
-  __socket_type getsock();
-  void setsock(__socket_type);
+  basic_sockbuf(basic_sockbuf const&);
+  basic_sockbuf& operator=(basic_sockbuf const&);
+
+  __socket_type sock();
+  void sock(__socket_type);
   virtual int_type overflow(int_type = traits_type::eof());
   virtual int_type underflow();
   virtual int sync();
 
 private:
-  enum { MAXBUF = 1024 };
-
   __socket_type __sockfd;
   char_type __pbuf[MAXBUF];
   char_type __gbuf[MAXBUF];
-
-  basic_sockbuf(basic_sockbuf const&);
 };
+
+// ============= //
+// basic_httpbuf //
+// ============= //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_httpbuf : public basic_sockbuf<_CharT, _Traits>
@@ -84,8 +94,17 @@ public:
   typedef std::ios_base::openmode __openmode_type;
 
   basic_httpbuf();
+  virtual ~basic_httpbuf();
   basic_httpbuf* open(char const*, __openmode_type);
+  basic_httpbuf* open(std::string const&, __openmode_type);
+
+private:
+  basic_httpbuf* __open(char const*);
 };
+
+// ================= //
+// basic_isockstream //
+// ================= //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_isockstream : public virtual std::basic_istream<_CharT, _Traits>
@@ -95,8 +114,17 @@ public:
   typedef _Traits traits_type;
   typedef basic_sockbuf<char_type, traits_type> __buffer_type;
 
-  basic_isockstream(__buffer_type*);
+  explicit basic_isockstream(__buffer_type*);
+  virtual ~basic_isockstream();
+
+protected:
+  basic_isockstream(basic_isockstream const&);
+  basic_isockstream& operator=(basic_isockstream const&);
 };
+
+// ================= //
+// basic_osockstream //
+// ================= //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_osockstream : public virtual std::basic_ostream<_CharT, _Traits>
@@ -106,8 +134,17 @@ public:
   typedef _Traits traits_type;
   typedef basic_sockbuf<char_type, traits_type> __buffer_type;
 
-  basic_osockstream(__buffer_type*);
+  explicit basic_osockstream(__buffer_type*);
+  virtual ~basic_osockstream();
+
+protected:
+  basic_osockstream(basic_osockstream const&);
+  basic_osockstream& operator=(basic_osockstream const&);
 };
+
+// ================== //
+// basic_iosockstream //
+// ================== //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_iosockstream : public basic_osockstream<_CharT, _Traits>,
@@ -120,6 +157,10 @@ public:
 
   basic_iosockstream(__buffer_type*);
 };
+
+// ================= //
+// basic_httprequest //
+// ================= //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_httprequest
@@ -142,6 +183,10 @@ private:
   __string_type __url;
   __headers_type __headers;
 };
+
+// ================== //
+// basic_httpresponse //
+// ================== //
 
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_httpresponse
@@ -167,6 +212,10 @@ private:
   __body_type __body;
 };
 
+// ================ //
+// basic_httpstream //
+// ================ //
+
 template<typename _CharT, typename _Traits = std::char_traits<_CharT> >
 class basic_httpstream : public basic_iosockstream<_CharT, _Traits>
 {
@@ -179,8 +228,10 @@ public:
   using std::ios_base::out;
 
   basic_httpstream();
-  basic_httpstream(char const*, __openmode_type = in | out);
+  explicit basic_httpstream(char const*, __openmode_type = in | out);
+  explicit basic_httpstream(std::string const&, __openmode_type = in | out);
   void open(char const*, __openmode_type = in | out);
+  void close();
   __buffer_type* rdbuf() const;
 
 private:
@@ -253,19 +304,29 @@ basic_sockbuf<_CharT, _Traits>::basic_sockbuf() : __sockfd(0)
 template<typename _CharT, typename _Traits>
 basic_sockbuf<_CharT, _Traits>::~basic_sockbuf()
 {
-  ::closesocket(__sockfd);
+  close();
+}
+
+template<typename _CharT, typename _Traits>
+basic_sockbuf<_CharT, _Traits>*
+basic_sockbuf<_CharT, _Traits>::close()
+{
+  basic_sockbuf* __ret = NULL;
+  if (::closesocket(__sockfd) == 0)
+    __ret = this;
+  return __ret;
 }
 
 template<typename _CharT, typename _Traits>
 typename basic_sockbuf<_CharT, _Traits>::__socket_type
-basic_sockbuf<_CharT, _Traits>::getsock()
+basic_sockbuf<_CharT, _Traits>::sock()
 {
   return __sockfd;
 }
 
 template<typename _CharT, typename _Traits>
 void
-basic_sockbuf<_CharT, _Traits>::setsock(__socket_type __sockfd)
+basic_sockbuf<_CharT, _Traits>::sock(__socket_type __sockfd)
 {
   this->__sockfd = __sockfd;
 }
@@ -306,43 +367,58 @@ basic_sockbuf<_CharT, _Traits>::sync()
 
 template<typename _CharT, typename _Traits>
 basic_httpbuf<_CharT, _Traits>::basic_httpbuf()
+  : basic_sockbuf<_CharT, _Traits>()
+{}
+
+template<typename _CharT, typename _Traits>
+basic_httpbuf<_CharT, _Traits>::~basic_httpbuf()
 {}
 
 template<typename _CharT, typename _Traits>
 basic_httpbuf<_CharT, _Traits>*
-basic_httpbuf<_CharT, _Traits>::open(char const* __url, __openmode_type)
+basic_httpbuf<_CharT, _Traits>::open(char const* __u, __openmode_type)
+{
+  return __open(__u);
+}
+
+template<typename _CharT, typename _Traits>
+basic_httpbuf<_CharT, _Traits>*
+basic_httpbuf<_CharT, _Traits>::open(std::string const& __u, __openmode_type)
+{
+  return __open(__u.c_str());
+}
+
+template<typename _CharT, typename _Traits>
+basic_httpbuf<_CharT, _Traits>*
+basic_httpbuf<_CharT, _Traits>::__open(char const* __url)
 {
   struct addrinfo hints, *info, *p;
-  int result, sockfd;
+  int result, fd;
 
   std::memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((result = ::getaddrinfo(__url, "http", &hints, &info)) != 0) {
+  if ((result = ::getaddrinfo(__url, "http", &hints, &info)) != 0)
     return NULL;
-  }
 
   for (p = info; p != NULL; p = p->ai_next) {
-    if ((sockfd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol))
-        == -1) {
+    if ((fd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
       continue;
-    }
 
-    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-      ::closesocket(sockfd);
+    if (connect(fd, p->ai_addr, p->ai_addrlen) == -1) {
+      ::closesocket(fd);
       continue;
     }
 
     break;
   }
 
-  if (p == NULL) {
+  if (p == NULL)
     return NULL;
-  }
 
   ::freeaddrinfo(info);
-  this->setsock(sockfd);
+  this->sock(fd);
 
   return this;
 }
@@ -353,8 +429,16 @@ basic_isockstream<_CharT, _Traits>::basic_isockstream(__buffer_type* __buf)
 {}
 
 template<typename _CharT, typename _Traits>
+basic_isockstream<_CharT, _Traits>::~basic_isockstream()
+{}
+
+template<typename _CharT, typename _Traits>
 basic_osockstream<_CharT, _Traits>::basic_osockstream(__buffer_type* __buf)
   : std::basic_ostream<_CharT, _Traits>(__buf)
+{}
+
+template<typename _CharT, typename _Traits>
+basic_osockstream<_CharT, _Traits>::~basic_osockstream()
 {}
 
 template<typename _CharT, typename _Traits>
@@ -453,21 +537,24 @@ basic_httpresponse<_CharT, _Traits>::body()
 
 template<typename _CharT, typename _Traits>
 basic_httpstream<_CharT, _Traits>::basic_httpstream()
-  : std::basic_istream<_CharT, _Traits>(&__buf),
-    basic_iosockstream<_CharT, _Traits>(&__buf)
+  : basic_iosockstream<_CharT, _Traits>(&__buf)
 {}
 
 template<typename _CharT, typename _Traits>
 basic_httpstream<_CharT, _Traits>::basic_httpstream(char const* __url,
                                                     __openmode_type __mode)
-  : std::basic_istream<_CharT, _Traits>(&__buf),
-    basic_iosockstream<_CharT, _Traits>(&__buf)
+  : basic_iosockstream<_CharT, _Traits>(&__buf)
 {
-  if (!__buf.open(__url, __mode)) {
+  if (!__buf.open(__url, __mode))
     this->setstate(std::ios_base::failbit);
-  } else {
-    this->clear();
-  }
+}
+
+template<typename _CharT, typename _Traits>
+basic_httpstream<_CharT, _Traits>::basic_httpstream(std::string const& __url,
+                                                    __openmode_type __mode)
+{
+  if (!__buf.open(__url, __mode))
+    this->setstate(std::ios_base::failbit);
 }
 
 template<typename _CharT, typename _Traits>
@@ -475,7 +562,8 @@ void
 basic_httpstream<_CharT, _Traits>::open(char const* __url,
                                         __openmode_type __mode)
 {
-  __buf.open(__url, __mode);
+  if (!__buf.open(__url, __mode))
+    this->setstate(std::ios_base::failbit);
 }
 
 template<typename _CharT, typename _Traits>
@@ -483,6 +571,14 @@ typename basic_httpstream<_CharT, _Traits>::__buffer_type*
 basic_httpstream<_CharT, _Traits>::rdbuf() const
 {
   return const_cast<__buffer_type*>(&__buf);
+}
+
+template<typename _CharT, typename _Traits>
+void
+basic_httpstream<_CharT, _Traits>::close()
+{
+  if (!__buf.close())
+    this->setstate(std::ios_base::failbit);
 }
 
 template<typename _CharT, typename _Traits>
